@@ -96,6 +96,7 @@ local function place_node(itemstack, placer, pointed_thing)
     local pos = pointed_thing.under
     local node = minetest.get_node_or_nil(pos)
     local def = node and minetest.registered_nodes[node.name]
+    local count = itemstack:get_count()
 
     if not def or not def.buildable_to then
         pos = pointed_thing.above
@@ -118,11 +119,11 @@ local function place_node(itemstack, placer, pointed_thing)
         end
     end
 
-    if is_creative_mode(placer) then
-        return itemstack
-    else
-        return ItemStack('')
+    if not is_creative_mode(placer) then
+        itemstack:set_count(count - 1)
     end
+
+    return itemstack
 end
 
 local function rightclick_node(pos, node, clicker, itemstack, pointed_thing)
@@ -139,6 +140,9 @@ local function rightclick_node(pos, node, clicker, itemstack, pointed_thing)
     local item_source
     local node_source
     local old_amount = amount
+    local inventory = clicker:get_inventory()
+    local count = wielded:get_count() - 1
+    local s
 
     if _buckets[wielded_name].source then
         if amount == 0 or _tanks[node.name].source == _buckets[wielded_name].source then
@@ -155,9 +159,8 @@ local function rightclick_node(pos, node, clicker, itemstack, pointed_thing)
     else
         if amount >= _buckets[wielded_name].amount then
             amount = amount - _buckets[wielded_name].amount
-            if is_creative_mode(clicker) then
-                item_source = nil
-            else
+            item_source = nil
+            if not is_creative_mode(clicker) then
                 item_source = _tanks[node.name].source
             end
             node_source = _tanks[node.name].source
@@ -178,9 +181,23 @@ local function rightclick_node(pos, node, clicker, itemstack, pointed_thing)
         end
     end
 
+    if is_creative_mode(clicker) then
+        return wielded
+    end
+
     for item_name, def in pairs(_buckets) do
         if def.group == _buckets[wielded_name].group and def.source == item_source then
-            wielded = ItemStack(item_name)
+            if count == 0 then
+                wielded = ItemStack(item_name)
+            else
+                s = ItemStack(item_name)
+                wielded:set_count(count)
+                if inventory:room_for_item("main", s) then
+                    inventory:add_item("main", {name = item_name, count = 1})
+                else
+                    minetest.add_item(clicker:get_pos(), s)
+                end
+            end
             break
         end
     end
@@ -216,9 +233,10 @@ liquidtanks.register = function(source)
             on_rightclick = rightclick_node
         })
 
-        minetest.register_tool(item_name, {
+        minetest.register_craftitem(item_name, {
             description = _config.description,
             inventory_image = 'liquidtanks_tank_inv_base.png',
+            stack_max = 99,
             on_place = place_node
         })
 
