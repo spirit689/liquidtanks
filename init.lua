@@ -3,6 +3,7 @@
 liquidtanks = {}
 
 local mod_name = minetest.get_current_modname()
+local mod_path = minetest.get_modpath(mod_name)
 local S = minetest.get_translator(mod_name)
 
 local _tanks = {}
@@ -35,6 +36,90 @@ local function get_item_name(itemname)
     return mod_name .. ':' .. table.concat(name, '_')
 end
 
+-- ---
+
+local _controller = {}
+
+function _controller.update_node(self, pos, node_name, amount)
+    local param = 0
+    local metadata
+    if amount > 0 then
+        param = math.ceil(63 / _config.amount * amount)
+    end
+
+    minetest.set_node(pos, {name = node_name, param2 = param})
+    if amount > 0 then
+        metadata = minetest.get_meta(pos)
+        metadata:set_string(_config.meta, amount)
+    end
+end
+
+function _controller.set(self, pos, source, amount)
+    local node_name = get_node_name(source)
+    self:update_node(pos, node_name, amount)
+end
+
+function _controller.take(self, pos, source, amount)
+    local can_take, current_amount = self:can_take(pos, source, amount)
+
+    if can_take then
+        self:set(pos, source, current_amount)
+        return amount
+    end
+
+    return 0
+end
+
+function _controller.put(self, pos, source, amount)
+    local can_put, current_amount = self:can_put(pos, source, amount)
+
+    if can_put then
+        self:set(pos, source, current_amount)
+        return amount
+    end
+
+    return 0
+end
+
+function _controller.can_take(self, pos, source, amount)
+    local current_amount = self:amount(pos)
+    local node = minetest.get_node(pos)
+    local allow = false
+
+    if _tanks[node.name].source == source and amount <= current_amount then
+        current_amount = current_amount - amount
+        allow = true
+    end
+
+    return allow, current_amount
+end
+
+function _controller.can_put(self, pos, source, amount)
+    local current_amount = self:amount(pos)
+    local node = minetest.get_node(pos)
+    local allow = false
+
+    if current_amount == 0 or _tanks[node.name].source == source then
+        if _config.amount - current_amount >= amount then
+            current_amount = current_amount + amount
+            allow = true
+        end
+    end
+
+    return allow, current_amount
+end
+
+function _controller.amount(self, pos)
+    local amount = tonumber(minetest.get_meta(pos):get_string(_config.meta))
+    if not amount then
+        amount = 0
+    end
+
+    return amount
+end
+
+-- ---
+
 local function is_creative_mode(player)
     return minetest.check_player_privs(player, 'creative') or minetest.is_creative_enabled(player:get_player_name())
 end
@@ -63,20 +148,6 @@ local function get_overlay_texture(def)
     return str
 end
 
-local function update_node(pos, node_name, amount)
-    local param = 0
-    local metadata
-    if amount > 0 then
-        param = math.ceil(63 / _config.amount * amount)
-    end
-
-    minetest.set_node(pos, {name = node_name, param2 = param})
-    if amount > 0 then
-        metadata = minetest.get_meta(pos)
-        metadata:set_string(_config.meta, amount)
-    end
-end
-
 local function preserve_node_meta(pos, oldnode, oldmeta, drops)
     local meta = drops[1]:get_meta()
     local amount = oldmeta[_config.meta]
@@ -85,7 +156,7 @@ local function preserve_node_meta(pos, oldnode, oldmeta, drops)
     end
 
     meta:set_string(_config.meta, amount)
-    meta:set_string('description', minetest.registered_nodes[oldnode.name].description .. '\n' .. amount .. ' mb')
+    meta:set_string('description', minetest.registered_nodes[oldnode.name].description .. '\n' .. amount .. ' mB')
     drops[1]:set_wear(65530 - math.ceil(65530 / _config.amount * amount))
 end
 
@@ -114,7 +185,7 @@ local function place_node(itemstack, placer, pointed_thing)
 
     for node_name, def in pairs(_tanks) do
         if itemstack:get_name() == def.itemname then
-            update_node(pos, node_name, amount)
+            _controller:set(pos, def.source, amount)
             break
         end
     end
@@ -132,52 +203,21 @@ local function rightclick_node(pos, node, clicker, itemstack, pointed_thing)
 
     if not _buckets[wielded_name] then return end
 
-    local amount = tonumber(minetest.get_meta(pos):get_string(_config.meta))
-    if not amount then
-        amount = 0
-    end
-
-    local item_source
-    local node_source
-    local old_amount = amount
     local inventory = clicker:get_inventory()
     local count = wielded:get_count() - 1
     local s
+    local item_source
+    local amount
 
     if _buckets[wielded_name].source then
-        if amount == 0 or _tanks[node.name].source == _buckets[wielded_name].source then
-            if math.abs(_config.amount - amount) >= _buckets[wielded_name].amount then
-                amount = amount + _buckets[wielded_name].amount
-                if(is_creative_mode(clicker)) then
-                    item_source = _buckets[wielded_name].source
-                else
-                    item_source = nil
-                end
-                node_source = _buckets[wielded_name].source
-            end
+        amount = _controller:put(pos, _buckets[wielded_name].source, _buckets[wielded_name].amount)
+        if amount > 0 then
+            item_source = nil
         end
     else
-        if amount >= _buckets[wielded_name].amount then
-            amount = amount - _buckets[wielded_name].amount
-            item_source = nil
-            if not is_creative_mode(clicker) then
-                item_source = _tanks[node.name].source
-            end
-            node_source = _tanks[node.name].source
-            if amount == 0 then
-                node_source = nil
-            end
-        end
-    end
-
-    if old_amount == amount then
-        return wielded
-    end
-
-    for node_name, def in pairs(_tanks) do
-        if def.source == node_source then
-            update_node(pos, node_name, amount)
-            break
+        amount = _controller:take(pos, _tanks[node.name].source, _buckets[wielded_name].amount)
+        if amount > 0 then
+            item_source = _tanks[node.name].source
         end
     end
 
