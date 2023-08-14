@@ -73,7 +73,14 @@ Controller.update_node = function(self, pos, node_name, amount)
 end
 
 Controller.set = function(self, pos, source, amount)
-    local node_name = self:get_node_name(source)
+    local node_name
+
+    if amount > 0 then
+        node_name = self:get_node_name(source)
+    else
+        node_name = self:get_node_name(nil)
+    end
+
     self:update_node(pos, node_name, amount)
 end
 
