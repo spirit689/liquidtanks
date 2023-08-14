@@ -89,7 +89,8 @@ local function rightclick_node(pos, node, clicker, itemstack, pointed_thing)
 
     local inventory = clicker:get_inventory()
     local count = wielded:get_count() - 1
-    local s, item_source, amount, item_name
+    local item_source = lc_bucket.source
+    local s, amount, item_name
 
     if lc_bucket.source then
         amount = LC:put(pos, lc_bucket.source, lc_bucket.amount)

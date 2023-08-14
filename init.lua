@@ -9,7 +9,7 @@ liquidtanks = {
     modpath = mod_path,
     config = {
         meta = 'liquidtanks:amount',
-        amount = 8000,
+        amount = 16000,
         description = S('Liquid tank')
     }
 }
