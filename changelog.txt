@@ -1,3 +1,9 @@
+0.1.1
++ refactor code
++ added `fluid_lib` support via `node_io` api
+https://github.com/auouymous/node_io
+https://content.minetest.net/packages/IcyDiamond/fluid_lib
+
 0.1.0
 +update for Minetest 5.6
 +simplified code and item registration

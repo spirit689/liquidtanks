@@ -2,6 +2,9 @@
 local LC = liquidtanks.controller
 local CFG = liquidtanks.config
 
+local supports_node_io = minetest.global_exists("node_io")
+local supports_fluid_lib = minetest.global_exists("fluid_lib")
+
 local function is_creative_mode(player)
     return minetest.check_player_privs(player, 'creative') or minetest.is_creative_enabled(player:get_player_name())
 end
@@ -127,6 +130,85 @@ local function rightclick_node(pos, node, clicker, itemstack, pointed_thing)
     return wielded
 end
 
+local function register_fluid_def(node_name)
+    local ndef = {}
+    local def = minetest.registered_nodes[node_name]
+    local groups = def.groups
+
+    if supports_fluid_lib then
+        groups['fluid_container'] = 1
+        ndef.groups = groups
+
+        ndef.fluid_buffers = {
+            buffer = {
+                capacity  = CFG.amount,
+                accepts   = true,
+                drainable = true,
+            }
+        }
+    end
+
+    if supports_node_io then
+        ndef.after_place_node = node_io.update_neighbors
+
+        ndef.after_dig_node = node_io.update_neighbors
+
+        local can_put_liquid = function (pos, node, side, liquid, millibuckets)
+            return CFG.amount - LC:amount(pos)
+        end
+        ndef.node_io_room_for_liquid = can_put_liquid
+        ndef.node_io_can_put_liquid = can_put_liquid
+
+        ndef.node_io_can_take_liquid = function (pos, node, side)
+            return LC:amount(pos) > 0
+        end
+
+        ndef.node_io_accepts_millibuckets = function(pos, node, side)
+            return true
+        end
+
+        ndef.node_io_put_liquid = function(pos, node, side, putter, liquid, millibuckets)
+            local can_put, current_amount = LC:can_put(pos, liquid, millibuckets)
+            local leftovers = CFG.amount - current_amount
+
+            if can_put then
+                LC:set(pos, liquid, current_amount)
+                return leftovers
+            end
+
+            return 0
+        end
+
+        ndef.node_io_take_liquid = function(pos, node, side, taker, want_liquid, want_millibuckets)
+            local amount = LC:take(pos, want_liquid, want_millibuckets)
+            return {
+                name = want_liquid,
+                millibuckets = amount
+            }
+        end
+
+        ndef.node_io_get_liquid_size = function (pos, node, side)
+            return 1
+        end
+
+        ndef.node_io_get_liquid_name = function(pos, node, side, index)
+            return LC.tanks[node.name].source
+        end
+
+        ndef.node_io_get_liquid_stack = function(pos, node, side, index)
+            if LC.tanks[node.name].source then
+                return ItemStack(LC.tanks[node.name].source .. ' 1000')
+            end
+
+            return ItemStack(nil)
+        end
+    end
+
+    if ndef then
+        minetest.override_item(node_name, ndef)
+    end
+end
+
 -- add new source
 liquidtanks.register = function(source)
     local node_name = LC:get_node_name(source)
@@ -159,6 +241,7 @@ liquidtanks.register = function(source)
         })
 
         LC:register_tank(node_name, nil, item_name)
+        register_fluid_def(node_name)
         return
     end
 
@@ -185,6 +268,7 @@ liquidtanks.register = function(source)
     end
 
     minetest.register_node(node_name, ndef)
+    register_fluid_def(node_name)
 
     local idef = {
         description = CFG.description .. ' (' .. def.description .. ')',
