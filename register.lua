@@ -192,12 +192,18 @@ local function register_fluid_def(node_name)
         end
 
         ndef.node_io_get_liquid_name = function(pos, node, side, index)
-            return LC.tanks[node.name].source
+            return LC.tanks[node.name].source or ''
         end
 
         ndef.node_io_get_liquid_stack = function(pos, node, side, index)
+            local amount = LC:amount(pos)
+
+            if amount > 1000 then
+                amount = 1000
+            end
+
             if LC.tanks[node.name].source then
-                return ItemStack(LC.tanks[node.name].source .. ' 1000')
+                return ItemStack(LC.tanks[node.name].source .. ' ' .. amount)
             end
 
             return ItemStack(nil)
