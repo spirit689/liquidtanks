@@ -1,4 +1,4 @@
-Liquid Tanks [0.1.0]
+Liquid Tanks [0.1.1]
 ================================
 
 Mod adds storage tanks for liquids. Вy default, items and liquids registered in the "bucket" plugin are supported.
